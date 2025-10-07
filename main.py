@@ -7,7 +7,6 @@ import requests
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 
-
 class Format(Enum):
     JSON = "json"
     HTML = "html"
@@ -15,7 +14,6 @@ class Format(Enum):
 
 JAKARTA_TZ = timezone(timedelta(hours=7))
 UTC = timezone.utc
-
 
 class Kompas:
     BASE = "https://cds.kompas.id/api/v2/"
@@ -456,6 +454,58 @@ def root():
   .thumb {
     width: 96px; height: 72px; object-fit: cover; border: 2px inset #999; background: #eee;
   }
+  /* --- Mobile-safe table text wrapping --- */
+table.results {
+  width: 100%;
+  table-layout: fixed;        /* enables wrapping within cells */
+}
+
+/* wrap everything inside cells, including long URLs */
+table.results th,
+table.results td,
+table.results td * {
+  overflow-wrap: anywhere;    /* modern wrapping */
+  word-break: break-word;     /* fallback */
+  hyphens: auto;              /* nicer hyphenation when allowed */
+}
+
+/* keep images responsive so they don't force overflow */
+.thumb {
+  max-width: 100%;
+  height: auto;               /* override fixed height on small screens */
+}
+
+/* make the raw URL line wrap instead of stretching the layout */
+.results a {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* optional: if content paragraphs are long, ensure they wrap too */
+.content-snippet p {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* fallback horizontal scroll if *something* still goes wide */
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* small-screen niceties */
+@media (max-width: 600px) {
+  /* loosen rigid first-column width on tiny screens */
+  table.results th[width],
+  table.results td:first-child {
+    width: auto !important;
+  }
+  /* reduce inside padding a bit to gain space */
+  table.results th, table.results td { padding: 6px 5px; }
+}
+
   .foot {
     margin-top: 12px; text-align: center; font-size: 12px; color: #333;
   }
@@ -497,6 +547,7 @@ def root():
 
     <div class="panel">
       <b>Results</b>
+      <div class="table-wrap">
       <table class="results">
         <thead>
           <tr>
@@ -508,6 +559,7 @@ def root():
           <tr><td colspan="2">Loading... please wait</td></tr>
         </tbody>
       </table>
+      </div>
     </div>
 
     <div class="foot">
@@ -641,9 +693,8 @@ def root():
 </html>
 """.replace("%%YEAR%%", str(year))
     return HTMLResponse(content=html)
-
-# Example Usage:
-
+    
+# Example usage:
 #     list_articles = kompas.articles()
 #     print(list_articles)
 
