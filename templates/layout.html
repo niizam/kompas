@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<!-- ======================================================
+     KOMPAS Online - Edisi Internet
+     Made with Notepad. Best viewed with Netscape Navigator 3.0
+     at 800x600 in 256 colors.
+     ====================================================== -->
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="Notepad.exe">
+<title>%%TITLE%%</title>
+<link rel="icon" type="image/png" href="https://www.kompas.id/artikel/favicon.png">
+<link rel="stylesheet" href="/static/retro.css">
+</head>
+<body>
+%%BEFORE_PAGE%%
+<div class="page">
+
+  <div class="mast-top">
+    <span id="today">&nbsp;</span>
+    <span>EDISI INTERNET &middot; Jakarta</span>
+    <span class="mast-clock" id="clock">--:--:-- WIB</span>
+  </div>
+
+  <div class="masthead">
+    <h1 class="logo"><a href="/" title="KOMPAS Online - Front Page"><span class="logo-k">KOMPAS</span> <span class="logo-online">Online</span></a></h1>
+    <div class="tagline">Amanat Hati Nurani Rakyat &mdash; <b>now on the Information Superhighway!</b></div>
+    <span class="edition">&#9733; UNOFFICIAL ALTERNATIVE FRONTEND &#9733;</span>
+  </div>
+
+  <div class="toolbar" role="toolbar">
+%%TOOLBAR%%
+    <span class="sep" aria-hidden="true"></span>
+    <form action="/" method="get" id="search-form" role="search">
+      <label for="q">Search:</label>
+      <input class="input95" id="q" name="q" type="text" placeholder="Cari berita..." value="%%QUERY%%">
+      <button class="btn95" type="submit">Go!</button>
+    </form>
+  </div>
+
+  <div class="ticker">
+    <div class="ticker-label">BREAKING</div>
+    <marquee id="headline-marquee" behavior="scroll" direction="left" scrollamount="4">
+      Loading headlines&hellip; <span class="blink">please wait</span>
+    </marquee>
+  </div>
+
+  <table class="layout" role="presentation">
+    <tr>
+      <td class="col-left">
+        <div class="side-head">SECTIONS</div>
+        <ul class="nav-list">
+          <li><a href="/">Front Page</a></li>
+          <li><a href="/?feed=latest" data-feed="latest">Latest News</a></li>
+          <li><a href="/?feed=popular" data-feed="popular">Most Popular</a></li>
+          <li><a href="/?feed=hot" data-feed="hot">Hot Topics</a></li>
+        </ul>
+
+        <div class="side-head">TOPICS</div>
+        <ul class="nav-list">
+          <li><a href="/?q=politik">Politik</a></li>
+          <li><a href="/?q=ekonomi">Ekonomi</a></li>
+          <li><a href="/?q=olahraga">Olahraga</a></li>
+          <li><a href="/?q=internasional">Internasional</a></li>
+          <li><a href="/?q=teknologi">Teknologi</a></li>
+          <li><a href="/?q=budaya">Budaya</a></li>
+        </ul>
+
+        <div class="side-head">COOL LINKS</div>
+        <ul class="nav-list">
+          <li><a href="https://www.kompas.id" target="_blank" rel="noopener">kompas.id</a></li>
+          <li><a href="/api/article" target="_blank">Raw JSON feed</a></li>
+          <li><a href="/healthz" target="_blank">Server status</a></li>
+          <li><a href="https://github.com/niizam/kompas" target="_blank" rel="noopener">Source code</a></li>
+        </ul>
+
+        <div class="side-note">
+          <p>&#127760; Best viewed with<br><b>Netscape Navigator 3.0</b><br>at 800&times;600</p>
+          <p>Set your monitor to<br>256 colors!</p>
+        </div>
+      </td>
+
+      <td class="col-main" id="main">
+%%MAIN%%
+      </td>
+
+      <td class="col-right">
+        <div class="side-head">VISITOR COUNTER</div>
+        <div class="box" style="text-align:center">
+          You are visitor number<br>
+          <span class="counter" id="hit-counter" role="img" aria-label="Visit counter"><span>0</span><span>0</span><span>0</span><span>0</span><span>0</span><span>1</span></span><br>
+          <small>(to this page, from your computer)</small>
+        </div>
+
+        <div class="side-head">TOPIK HANGAT</div>
+        <div class="box">
+          <ol id="hot-box"><li>Loading&hellip;</li></ol>
+        </div>
+
+        <div class="side-head">READER POLL</div>
+        <div class="box poll" id="poll">
+          <b>Do you have an e-mail address yet?</b>
+          <form id="poll-form">
+            <label><input type="radio" name="vote" value="yes"> Yes, on CompuServe</label>
+            <label><input type="radio" name="vote" value="soon"> Getting one next year</label>
+            <label><input type="radio" name="vote" value="what"> What is e-mail?</label>
+            <button class="btn95" type="submit">Vote!</button>
+          </form>
+        </div>
+
+        <div class="side-head">JUKEBOX</div>
+        <div class="box midi" id="midi">
+          &#9835; Now playing:
+          <span class="now">kompas_theme.mid<span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span></span>
+          <button class="btn95" type="button" id="midi-play">&#9654; Play</button>
+          <button class="btn95" type="button" id="midi-stop">&#9632; Stop</button>
+        </div>
+
+        <div class="construction">
+          <span class="digger" aria-hidden="true">&#128679;</span>
+          GUESTBOOK<br>UNDER CONSTRUCTION<br>
+          <small>Check back soon!</small>
+        </div>
+
+        <div class="box" style="text-align:center">
+          <button class="btn95" type="button" id="toggle-sparkles">Cursor sparkles: ON</button>
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <div class="footer">
+    <div class="webring">
+      <span class="ring-title">&#128279; The Nusantara News Webring &#128279;</span>
+      <a class="btn95" href="/?feed=latest">&laquo; Prev</a>
+      <a class="btn95" href="/random">Random Story</a>
+      <a class="btn95" href="/?feed=popular">Next &raquo;</a>
+    </div>
+
+    <div class="badges">
+      <span class="badge88 netscape" title="Netscape Now!">Netscape<big>NOW!</big></span>
+      <span class="badge88 notepad" title="Made with Notepad">Made with<big>Notepad</big></span>
+      <span class="badge88 html" title="HTML 3.2">Valid<big>HTML 3.2</big></span>
+      <span class="badge88 y2k" title="Y2K compliant">Y2K<big>READY</big></span>
+      <span class="badge88 res" title="800x600">Best at<big>800x600</big></span>
+      <a class="badge88 fastapi" href="/docs" title="Powered by FastAPI">Powered by<big>FastAPI</big></a>
+    </div>
+
+    <div class="copyright">
+      <font size="2">Copyright &copy; %%YEAR%% PT Kompas Media Nusantara</font><br>
+      <small>Unofficial alternative frontend &middot; Content belongs to Kompas &middot; This page is Y2K compliant</small>
+    </div>
+  </div>
+</div>
+
+<div class="statusbar" aria-hidden="true">
+  <div class="status-msg" id="status-msg">Document: Done</div>
+  <div class="status-lock">&#128274;</div>
+  <div class="status-zone">Internet zone</div>
+</div>
+
+<noscript>
+  <div style="max-width:980px;margin:10px auto;border:3px solid #000;background:#fff;padding:8px;">
+    This site needs JavaScript to load articles. Try <a href="/api/article">/api/article</a>.
+  </div>
+</noscript>
+
+<script src="/static/retro.js"></script>
+%%SCRIPTS%%
+</body>
+</html>

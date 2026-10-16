@@ -1,11 +1,16 @@
 import json
+import random
+import re
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from html import escape, unescape
+from pathlib import Path
 from typing import Dict, Any, List, Union, Optional
-from urllib.parse import quote_plus
+from urllib.parse import quote, quote_plus
 import requests
 from fastapi import FastAPI, Query, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 class Format(Enum):
     JSON = "json"
@@ -14,6 +19,98 @@ class Format(Enum):
 
 JAKARTA_TZ = timezone(timedelta(hours=7))
 UTC = timezone.utc
+
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+LAYOUT_TEMPLATE = (BASE_DIR / "templates" / "layout.html").read_text(encoding="utf-8")
+
+DAYS_ID = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
+MONTHS_ID = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli",
+             "Agustus", "September", "Oktober", "November", "Desember"]
+
+# -------------------------- 1990s page chrome -------------------------- #
+
+def render_page(title: str, toolbar: str, main: str, before_page: str = "",
+                scripts: str = "", query: str = "") -> str:
+    """Fill the shared retro layout. Single pass, so content can't inject placeholders."""
+    values = {
+        "TITLE": escape(title, quote=False),
+        "TOOLBAR": toolbar,
+        "MAIN": main,
+        "BEFORE_PAGE": before_page,
+        "SCRIPTS": scripts,
+        "QUERY": escape(query),
+        "YEAR": str(datetime.now(JAKARTA_TZ).year),
+    }
+    return re.sub(r"%%([A-Z_]+)%%", lambda m: values.get(m.group(1), m.group(0)), LAYOUT_TEMPLATE)
+
+
+def read_link(permalink: str) -> str:
+    return "/read?permalink=" + quote(permalink, safe="") + "&format=html"
+
+
+def strip_tags(text: str) -> str:
+    return unescape(re.sub(r"<[^>]+>", "", text or "")).strip()
+
+
+def format_jakarta_long(epoch: Optional[int]) -> str:
+    if epoch is None:
+        return "Unknown date"
+    d = datetime.fromtimestamp(epoch, tz=UTC).astimezone(JAKARTA_TZ)
+    return f"{DAYS_ID[d.weekday()]}, {d.day} {MONTHS_ID[d.month - 1]} {d.year} &mdash; {d:%H:%M} WIB"
+
+
+def article_toolbar(url: str, title: str) -> str:
+    buttons = ['<a class="btn95" href="/">&laquo; Front Page</a>',
+               '<button class="btn95" type="button" onclick="window.print()">&#128424; Print</button>']
+    if url:
+        plain = strip_tags(title) or "A story from KOMPAS Online"
+        mailto = "mailto:?subject=" + quote(plain) + "&body=" + quote("Check out this story:\n\n" + plain + "\n" + url)
+        buttons.append(f'<a class="btn95" href="{escape(mailto)}">&#9993; E-mail to a Friend</a>')
+        buttons.append(f'<a class="btn95" href="{escape(url)}" target="_blank" rel="noopener">Original &#8599;</a>')
+    return "\n".join("    " + b for b in buttons)
+
+
+FRONT_TOOLBAR = """\
+    <a class="btn95" href="/?feed=latest" data-feed="latest">&#128240; Latest</a>
+    <a class="btn95" href="/?feed=popular" data-feed="popular">&#11088; Popular</a>
+    <a class="btn95" href="/?feed=hot" data-feed="hot">&#128293; Hot Topics</a>"""
+
+FRONT_MAIN = """\
+        <div class="section-bar">
+          <h2 id="section-title">Latest News</h2>
+          <small id="section-meta">Contacting host...</small>
+        </div>
+        <div id="results" aria-live="polite">
+          <div class="loading-msg"><span class="hourglass" aria-hidden="true">&#8987;</span> Loading&hellip; <span class="blink">please wait</span></div>
+        </div>"""
+
+FRONT_OVERLAYS = """\
+<div id="dialup" hidden>
+  <div class="win95" role="dialog" aria-modal="true" aria-labelledby="dial-title">
+    <div class="titlebar"><span id="dial-title">Connect To: KOMPAS Online</span><button class="x" type="button" data-skip aria-label="Close">&times;</button></div>
+    <div class="win-body">
+      <div class="dial-row">
+        <div class="dial-icon" aria-hidden="true">&#9742;</div>
+        <div>Dial-Up Networking<br><span id="dial-status"><b>Initializing modem...</b></span></div>
+      </div>
+      <div class="dial-log bevel-in" id="dial-log"></div>
+      <div class="progress95 bevel-in" id="dial-progress"></div>
+      <div class="win-actions"><button class="btn95" type="button" data-skip>Skip &raquo;</button></div>
+    </div>
+  </div>
+</div>
+<div id="popup" class="win95" role="dialog" aria-labelledby="pop-title" hidden>
+  <div class="titlebar"><span id="pop-title">&#128226; You've got news!</span><button class="x" type="button" data-close aria-label="Close">&times;</button></div>
+  <div class="win-body">
+    <b>KOMPAS Online Breaking News Alert</b>
+    <p class="pop-headline" id="pop-headline"></p>
+    <div class="win-actions">
+      <a class="btn95" id="pop-read" href="/">Read Story</a>
+      <button class="btn95" type="button" data-close>Close</button>
+    </div>
+  </div>
+</div>"""
 
 class Kompas:
     BASE = "https://cds.kompas.id/api/v2/"
@@ -184,75 +281,93 @@ class Kompas:
     # -------------------------- Rendering -------------------------- #
 
     @staticmethod
-    def _render_html(structured: Dict[str, Any]) -> str:
+    def _render_block(b: Dict[str, Any], first_para: bool) -> str:
+        btype = b.get("type") or "unknown"
+
+        if "text" in b:
+            if btype.startswith("heading-"):
+                lvl = btype.split("-")[-1]
+                return f"<h{lvl}>{b['text']}</h{lvl}>"
+            if btype == "blockquote":
+                return f"<blockquote>{b['text']}</blockquote>"
+            if btype == "caption":
+                return f"<p class=\"caption\">{b['text']}</p>"
+            cls = ' class="first"' if first_para else ""
+            return f"<p{cls}>{b['text']}</p>"
+
+        if btype == "image" and "url" in b:
+            src = escape(b["url"])
+            cap = f"<figcaption>{b['caption']}</figcaption>" if b.get("caption") else ""
+            return (f'<figure><a class="thumb-frame" href="{src}" target="_blank">'
+                    f'<img src="{src}" alt="" loading="lazy" data-modem></a>{cap}</figure>')
+
+        if btype == "ordered" and "list" in b:
+            return "<ol>" + "".join(f"<li>{it}</li>" for it in b["list"]) + "</ol>"
+
+        if btype == "recommender" and "recommendation" in b:
+            rec = b["recommendation"]
+            return (f'<div class="see-also"><b>&#9758; SEE ALSO:</b> '
+                    f'<a href="{escape(read_link(rec["url"]))}">{rec["title"]}</a></div>')
+
+        if btype == "separator":
+            return "<hr>"
+
+        return ""
+
+    @staticmethod
+    def _render_html(structured: Optional[Dict[str, Any]], permalink: str = "") -> str:
+        if not structured:
+            main = ('<div class="article"><div class="nodata">'
+                    '<h1>404 - Story Not Found</h1>'
+                    '<p>The story you requested could not be retrieved from the news wire.<br>'
+                    'It may have moved, or the line may be busy.</p>'
+                    '<p><a class="btn95" href="/">&laquo; Back to the Front Page</a></p>'
+                    '</div></div>')
+            return render_page("KOMPAS Online -- Story Not Found", article_toolbar(permalink, ""), main)
+
         title = structured.get("title", "")
         url = structured.get("url", "")
-        published = Kompas._epoch_utc_to_jakarta_str(structured.get("published_date"))
+        published = format_jakarta_long(structured.get("published_date"))
         authors: List[Dict[str, str]] = structured.get("authors", [])
         keywords_list: List[str] = structured.get("keywords", [])
         thumb = structured.get("thumbnail")
         blocks: List[Dict[str, Any]] = structured.get("content", [])
 
-        parts: List[str] = []
-        parts.append("<!DOCTYPE html>")
-        parts.append("<html><head>")
-        parts.append(f"<title>{title}</title>")
-        parts.append('<meta charset="UTF-8">')
-        parts.append('<meta name="viewport" content="width=device-width, initial-scale=1.0">')
-        parts.append("<style>")
-        parts.append("body{font-family:sans-serif;line-height:1.6;max-width:800px;margin:auto;padding:20px}")
-        parts.append("h1{border-bottom:2px solid #ccc;padding-bottom:10px}")
-        parts.append(".metadata p{margin:5px 0;font-size:.9em;color:#555}")
-        parts.append(".content-block{margin-bottom:20px}")
-        parts.append(".content-block img{max-width:100%;height:auto;display:block;margin:10px 0}")
-        parts.append(".recommendation{border-left:4px solid #007bff;padding-left:10px;margin-top:20px}")
-        parts.append("</style></head><body>")
+        parts: List[str] = ['<div class="article">']
+        section = escape(keywords_list[-1]) if keywords_list else "Berita"
+        parts.append(f'<div class="crumbs"><a href="/">KOMPAS Online</a> &raquo; {section}</div>')
         parts.append(f"<h1>{title}</h1>")
 
-        parts.append('<div class="metadata">')
-        parts.append(f'<p><strong>URL:</strong> <a href="{url}">{url}</a></p>')
-        parts.append(f"<p><strong>Published:</strong> {published}</p>")
-        parts.append("<p><strong>Authors:</strong></p><ul>")
+        byline = [f"&#128197; {published}"]
         for a in authors:
             for role, name in a.items():
-                parts.append(f"<li>{role}: {name}</li>")
-        parts.append("</ul>")
-        if keywords_list:
-            parts.append(f"<p><strong>Keywords:</strong> {', '.join(keywords_list)}</p>")
+                byline.append(f"<b>{escape(role)}:</b> {escape(name)}")
+        parts.append('<div class="byline">' + " &middot; ".join(byline) + "</div>")
+
         if thumb:
-            parts.append(f'<a href="{thumb}" target="_blank"><img src="{thumb}" alt="Thumbnail" style="max-width:100%;"></a>')
-        parts.append("</div><hr/><h2>Content:</h2>")
+            t = escape(thumb)
+            parts.append(f'<figure class="lead"><a class="thumb-frame" href="{t}" target="_blank">'
+                         f'<img src="{t}" alt="" data-modem></a>'
+                         f'<figcaption>Click picture to enlarge (may take a while on 14.4k modems)</figcaption></figure>')
 
+        parts.append('<div class="body">')
+        first_para = True
         for b in blocks:
-            btype = b.get("type") or "unknown"
-            parts.append(f'<div class="content-block type-{btype}">')
+            is_para = b.get("type") == "text" and "text" in b
+            parts.append(Kompas._render_block(b, first_para and is_para))
+            if is_para:
+                first_para = False
+        parts.append("</div>")
 
-            if "text" in b:
-                if btype.startswith("heading-"):
-                    lvl = btype.split("-")[-1]
-                    parts.append(f"<h{lvl}>{b['text']}</h{lvl}>")
-                else:
-                    parts.append(f"<p>{b['text']}</p>")
+        parts.append('<div class="end-mark">* * * &#9632; * * *</div>')
+        if keywords_list:
+            links = ", ".join(f'<a href="/?q={quote_plus(k)}">{escape(k)}</a>' for k in keywords_list)
+            parts.append(f'<div class="tags"><b>Related topics:</b> {links}</div>')
+        parts.append(f'<p class="tags no-print"><a href="/">&laquo; Back to the Front Page</a></p>')
+        parts.append("</div>")
 
-            elif btype == "ordered" and "list" in b:
-                parts.append("<ol>")
-                for it in b["list"]:
-                    parts.append(f"<li>{it}</li>")
-                parts.append("</ol>")
-
-            elif btype == "recommender" and "recommendation" in b:
-                rec = b["recommendation"]
-                parts.append('<div class="recommendation">')
-                parts.append(f'<p><strong>See also:</strong> <a href="{rec["url"]}">{rec["title"]}</a></p>')
-                parts.append("</div>")
-
-            elif btype == "separator":
-                parts.append("<hr/>")
-
-            parts.append("</div>")
-
-        parts.append("</body></html>")
-        return "\n".join(parts)
+        page_title = "KOMPAS Online -- " + strip_tags(title)
+        return render_page(page_title, article_toolbar(url, title), "\n".join(parts))
 
     # -------------------------- Public API -------------------------- #
 
@@ -271,7 +386,7 @@ class Kompas:
 
         data = self._get(self.ARTICLE_DETAIL_BASE + slug)
         if not data:
-            return "[]" if format == Format.JSON else "<!-- no data -->"
+            return "[]" if format == Format.JSON else self._render_html(None, permalink)
 
         structured = {
             "title": data.get("title", ""),
@@ -395,305 +510,28 @@ def get_article_detail(permalink: str, format: Format = Format.JSON):
 def healthz():
     return {"status": "ok"}
 
-from fastapi.responses import HTMLResponse
+@app.get("/random")
+def random_story():
+    """Webring "Random Story" button: jump to a random article from the latest feed."""
+    items = [a for a in kompas_api.articles() if a.get("url")]
+    if not items:
+        return RedirectResponse("/")
+    return RedirectResponse(read_link(random.choice(items)["url"]))
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 @app.get("/", response_class=HTMLResponse)
-def root():
-    year = datetime.now(JAKARTA_TZ).year
-    html = r"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8"/>
-<title>Kompas.id</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<link rel="icon" type="image/x-icon" href="https://www.kompas.id/artikel/favicon.png">
-<style>
-  body {
-    background: #e0e0e0 url('data:image/gif;base64,R0lGODlhEAAQAPQAAP///5mZmXPz8/Dw8O7u7tnZ2d3d3bu7u7GxsbS0tLe3t7q6ur+/v+Li4tjY2NPT09/f39jY2Nvb2+jo6N7e3uTk5OTk5P///wAAAAAAAAAAAAAAAAAAAAAAAAAAACH5BAEAABwALAAAAAAQABAAAAWg4CeOZGmeaKqubOu+cCzPdFQKBQKh8Si8Uqv2CwGAhA4HCAJgKBbDabD0Wi0Wi4XFYj8fj8HgkEolAqFQKJQKpWq/X6fYLBYLBaLRaLRcLpcJBAAAOw==') repeat;
-    color: #000;
-    font-family: "Verdana", "Tahoma", "Arial", sans-serif;
-  }
-  a { color: #0000EE; }
-  a:visited { color: #551A8B; }
-  .container {
-    max-width: 920px; margin: 10px auto; padding: 6px;
-    border: 3px double #000; background: #fffdf5;
-  }
-  .header {
-    border: 4px ridge #ccc; padding: 6px; background: #ffffcc;
-    text-align: center;
-  }
-  .header h1 { margin: 4px 0; font-size: 28px; letter-spacing: 1px; }
-  .nav {
-    margin: 8px 0; padding: 6px; border: 3px groove #999; background: #f0f0ff;
-    text-align: center;
-  }
-  .btn {
-    display: inline-block; padding: 6px 10px; margin: 2px;
-    border: 3px outset #bbb; background: #e6e6e6; cursor: pointer; font-weight: bold;
-  }
-  .btn:active { border: 3px inset #bbb; }
-  .searchbar { margin-top: 6px; }
-  input[type="text"] {
-    padding: 4px; border: 2px inset #ccc; width: 260px; background: #fff;
-  }
-  .ticker {
-    margin: 8px 0; border: 3px groove #aaa; background: #ccffcc; padding: 4px;
-  }
-  .panel {
-    border: 4px ridge #ccc; background: #fff; padding: 6px; margin-top: 8px;
-  }
-  table.results {
-    width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 6px;
-  }
-  table.results th, table.results td {
-    border: 2px solid #000; padding: 6px; vertical-align: top;
-  }
-  table.results th { background: #c0c0ff; }
-  .thumb {
-    width: 96px; height: 72px; object-fit: cover; border: 2px inset #999; background: #eee;
-  }
-  /* --- Mobile-safe table text wrapping --- */
-table.results {
-  width: 100%;
-  table-layout: fixed;        /* enables wrapping within cells */
-}
+def root(q: Optional[str] = None):
+    page = render_page(
+        "KOMPAS Online -- Edisi Internet",
+        FRONT_TOOLBAR,
+        FRONT_MAIN,
+        before_page=FRONT_OVERLAYS,
+        scripts='<script src="/static/front.js"></script>',
+        query=q or "",
+    )
+    return HTMLResponse(content=page)
 
-/* wrap everything inside cells, including long URLs */
-table.results th,
-table.results td,
-table.results td * {
-  overflow-wrap: anywhere;    /* modern wrapping */
-  word-break: break-word;     /* fallback */
-  hyphens: auto;              /* nicer hyphenation when allowed */
-}
-
-/* keep images responsive so they don't force overflow */
-.thumb {
-  max-width: 100%;
-  height: auto;               /* override fixed height on small screens */
-}
-
-/* make the raw URL line wrap instead of stretching the layout */
-.results a {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-/* optional: if content paragraphs are long, ensure they wrap too */
-.content-snippet p {
-  margin: 0 0 6px;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-/* fallback horizontal scroll if *something* still goes wide */
-.table-wrap {
-  width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* small-screen niceties */
-@media (max-width: 600px) {
-  /* loosen rigid first-column width on tiny screens */
-  table.results th[width],
-  table.results td:first-child {
-    width: auto !important;
-  }
-  /* reduce inside padding a bit to gain space */
-  table.results th, table.results td { padding: 6px 5px; }
-}
-
-  .foot {
-    margin-top: 12px; text-align: center; font-size: 12px; color: #333;
-  }
-  .blink {
-    animation: blink 1s steps(2, start) infinite;
-  }
-  @keyframes blink { to { visibility: hidden; } }
-  .content-snippet {
-    margin-top: 6px; background: #fffff0; border: 2px dashed #999; padding: 6px;
-    font-size: 13px;
-  }
-</style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1><a href="https://www.kompas.id" class="flex w-64" title="Kompas.id"><img class="w-auto h-10 lg:h-14 mx-auto" src="https://cdn-www.kompas.id/assets/kompas-logo-masthead.svg" alt="Kompas.id" width="249" height="40"></a></h1>
-    </div>
-
-    <div class="nav">
-      <span class="btn" onclick="loadLatest()">Latest</span>
-      <span class="btn" onclick="loadPopular()">Popular</span>
-      <span class="btn" onclick="loadHot()">Hot Topics</span>
-      <span style="margin-left:10px"></span>
-      <a class="btn" href="/healthz" target="_blank">Health Check</a>
-      <div class="searchbar">
-        <form onsubmit="doSearch(event)">
-          <input id="q" type="text" placeholder="Search Kompas..." />
-          <button class="btn" type="submit">Search!</button>
-        </form>
-      </div>
-    </div>
-
-    <div class="ticker">
-      <marquee id="headline-marquee" behavior="scroll" direction="left" scrollamount="4">
-        Loading headlines… <span class="blink">Please wait</span>
-      </marquee>
-    </div>
-
-    <div class="panel">
-      <b>Results</b>
-      <div class="table-wrap">
-      <table class="results">
-        <thead>
-          <tr>
-            <th width="110">Thumbnail</th>
-            <th>News</th>
-          </tr>
-        </thead>
-        <tbody id="results">
-          <tr><td colspan="2">Loading... please wait</td></tr>
-        </tbody>
-      </table>
-      </div>
-    </div>
-
-    <div class="foot">
-      <hr/>
-      <div>
-        <font size="2">Copyright © %%YEAR%% PT Kompas Media Nusantara</font>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    function el(tag, attrs={}, kids=[]) {
-      const n = document.createElement(tag);
-      for (const [k,v] of Object.entries(attrs)) {
-        if (k === 'class') n.className = v;
-        else if (k === 'html') n.innerHTML = v;
-        else n.setAttribute(k, v);
-      }
-      kids.forEach(k => n.appendChild(k));
-      return n;
-    }
-
-    function readLink(permalink) {
-      const href = "/read?permalink=" + encodeURIComponent(permalink) + "&format=html";
-      return href;
-    }
-
-    function renderRows(items) {
-      const body = document.getElementById('results');
-      body.innerHTML = "";
-      if (!items || items.length === 0) {
-        body.appendChild(el('tr', {}, [el('td', {colspan:'2', html:'No results.'})]));
-        return;
-      }
-      items.forEach(item => {
-        const thumb = item.thumbnail ? el('img', {src:item.thumbnail, class:'thumb', alt:'thumb'}) : el('div', {class:'thumb'});
-        const title = item.title || 'Untitled';
-        const url = item.url || '#';
-        const published = (item.published_date ? new Date(item.published_date * 1000) : null);
-        const dateStr = published ? published.toLocaleString('en-GB', { hour12:false }) : 'Unknown';
-
-        const aTitle = el('a', { href: readLink(url), target: '_blank', html: title });
-        const by = (item.authors && item.authors.length)
-          ? (' — ' + item.authors.map(o => {
-                const k = Object.keys(o)[0];
-                const v = o[k];
-                if (Array.isArray(v)) return k + ': ' + v.join(', ');
-                return k + ': ' + v;
-            }).join(' | '))
-          : '';
-
-        const kws = (item.keywords && item.keywords.length) ? ('<small><b>Keywords:</b> ' + item.keywords.join(', ') + '</small>') : '';
-
-        // Build the right cell
-        const cellRight = el('td', {}, [
-          el('div', {html: '<b>' + aTitle.outerHTML + '</b>'}),
-          el('div', {html: '<small><b>Published:</b> ' + dateStr + by + '</small>'}),
-        ]);
-
-        const contentParas = Array.isArray(item.content) ? item.content.slice(0, 4) : []; // show a few
-        if (contentParas.length) {
-          const snippetWrap = el('div', {class: 'content-snippet'});
-          contentParas.forEach(p => snippetWrap.appendChild(el('p', {html: p})));
-          cellRight.appendChild(snippetWrap);
-        }
-
-        // Source line (kept after content)
-        if (url) cellRight.appendChild(el('div', {html: '<small><b>Source:</b> <a href="' + url + '" target="_blank">' + url + '</a></small>'}));
-
-        // Keywords line (kept after content)
-        if (kws) cellRight.appendChild(el('div', {html: kws}));
-
-        const row = el('tr', {}, [el('td', {}, [thumb]), cellRight]);
-        body.appendChild(row);
-      });
-    }
-
-    async function fetchJSON(endpoint) {
-      try {
-        const r = await fetch(endpoint, { headers: { 'Accept': 'application/json' } });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return await r.json();
-      } catch (e) {
-        console.error(e);
-        const body = document.getElementById('results');
-        body.innerHTML = "";
-        body.appendChild(el('tr', {}, [el('td', {colspan:'2', html:'<span style="color:red">Error: ' + e.message + '</span>'})]));
-        return null;
-      }
-    }
-
-    function doSearch(ev) {
-      ev.preventDefault();
-      const q = document.getElementById('q').value.trim();
-      if (!q) { loadLatest(); return; }
-      fetchJSON('/api/article?search=' + encodeURIComponent(q)).then(renderRows);
-    }
-
-    function loadLatest() { fetchJSON('/api/article').then(renderRows); }
-    function loadPopular() { fetchJSON('/api/article?type=popular').then(renderRows); }
-    function loadHot() { fetchJSON('/api/article?type=hot').then(renderRows); }
-
-    // ----- Ticker / Marquee -----
-    function setMarqueeText(text) {
-      const mq = document.getElementById('headline-marquee');
-      mq.textContent = text;
-    }
-
-    async function loadTicker() {
-      const items = await fetchJSON('/api/article?type=hot');
-      if (!items || !items.length) {
-        setMarqueeText('No hot topics available at the moment.');
-        return;
-      }
-      const titles = items.map(it => it && it.title).filter(Boolean);
-      const line = titles.slice(0, 30).join('  •  ');
-      setMarqueeText(line);
-    }
-
-    // Initial load
-    loadLatest();
-    loadTicker();
-  </script>
-
-  <noscript>
-    <div style="max-width:920px;margin:10px auto;border:3px solid #000;background:#fff;padding:8px;">
-      This site needs JavaScript to load articles. Try <a href="/api/article" target="_blank">/api/article</a>.
-    </div>
-  </noscript>
-</body>
-</html>
-""".replace("%%YEAR%%", str(year))
-    return HTMLResponse(content=html)
-    
 # Example usage:
 #     list_articles = kompas.articles()
 #     print(list_articles)
