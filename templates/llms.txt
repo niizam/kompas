@@ -1,0 +1,48 @@
+# KOMPAS Online
+
+> Unofficial alternative frontend and JSON API for kompas.id, the Indonesian daily Kompas. It serves the latest, most popular and trending stories, keyword and date search, a daily archive, full article text and RSS feeds. Articles are in Indonesian (Bahasa Indonesia). Content belongs to PT Kompas Media Nusantara.
+
+All endpoints are plain HTTP GET with no authentication. Responses are cached for about two minutes. Dates are in Jakarta time (WIB, UTC+7). Timestamps in JSON are Unix epoch seconds (UTC).
+
+## Reading the site (HTML)
+
+- [Front page]({BASE}/): Latest headlines, a tabbed topics box, a ranking of popular stories, news from the reader's province, topic sections, a weather box and a news calendar.
+- [Feed views]({BASE}/?feed=popular): `?feed=latest|popular|hot` switches the main list.
+- [Search]({BASE}/?q=banjir): `?q=<keyword>` searches all stories since 2017.
+- [Daily archive]({BASE}/?date=2026-01-01): `?date=YYYY-MM-DD` lists stories published that day. The calendar widget links here.
+- [Regional news]({BASE}/?q=Jawa%20Timur): Searching for a province name gives that province's news.
+- Article page: `{BASE}/read?permalink=<kompas.id article URL>&format=html` is the readable story with images.
+- [Random story]({BASE}/random): Redirects to a random article from the latest feed.
+
+## JSON API
+
+- [Article list]({BASE}/api/article): `GET /api/article` returns an array of articles.
+  - `type=popular` or `type=hot` picks a feed. Leave it out for the latest stories.
+  - `search=<keyword>` runs a full-text search. It is ignored when `type` is set.
+  - `date=YYYY-MM-DD` gives one day's archive. It can be used with or without `search`.
+  - `from=YYYY-MM-DD` and `to=YYYY-MM-DD` limit a search to a date range.
+  - `page=N` gets more search results. There are 10 per page.
+  - Each article has `title`, `url` (the kompas.id permalink), `content` (an array of excerpt paragraphs, which may contain inline HTML), `authors` (an array like `[{"writer": "..."}, {"editor": "..."}]`), `published_date` (epoch seconds), `keywords` (an array of strings) and `thumbnail` (an image URL or null).
+- [Article detail]({BASE}/read?permalink=https://www.kompas.id/artikel/contoh): `GET /read?permalink=<url>` returns the full article as JSON. `permalink` takes a full kompas.id URL or just the slug. The response has `title`, `url`, `authors` (an array of `{role: name}`), `published_date`, `keywords`, `thumbnail` and `content`. `content` is an array of blocks, each with a `type`: `text`, `heading-2`, `heading-3`, `heading-4`, `blockquote`, `caption`, `image` (with `url`, `caption`), `ordered` (with `list`), `recommender` (with `recommendation: {title, url}`) or `separator`. A story that isn't found returns `[]`.
+- [Provinces]({BASE}/api/regions): `GET /api/regions` returns `{"default": "JK", "provinces": [...]}`. Each province has its ISO 3166-2:ID `code`, Indonesian `name`, `capital`, `lat`/`lon` and English `aliases`. Search for a province `name` to get regional news.
+- [Health check]({BASE}/healthz): Returns `{"status": "ok"}`.
+- [OpenAPI schema]({BASE}/openapi.json): A machine-readable description of every endpoint. Interactive docs are at [/docs]({BASE}/docs).
+
+## RSS feeds
+
+- [Latest news]({BASE}/rss.xml)
+- [Most popular]({BASE}/rss.xml?feed=popular)
+- [Hot topics]({BASE}/rss.xml?feed=hot)
+- Any search or day can be a feed: `{BASE}/rss.xml?q=<keyword>` or `{BASE}/rss.xml?date=YYYY-MM-DD`.
+
+## Tips for agents
+
+- To answer "what's the news today", call `/api/article`. Then call `/read?permalink=<url>` for the stories you need in full.
+- To find news about a place, search its Indonesian name, for example `Jawa Timur`, not `East Java`. Province codes: {PROVINCES}.
+- Keywords should be in Indonesian: `banjir` (flood), `pemilu` (election), `ekonomi`, `olahraga` (sport), `politik`.
+- Link to the original story with the article's `url`. Link to the readable copy here with `{BASE}/read?permalink=<url>&format=html`.
+
+## Optional
+
+- [Source code](https://github.com/niizam/kompas): The FastAPI app behind this site.
+- [kompas.id](https://www.kompas.id): The original publication.

@@ -11,33 +11,65 @@
 <meta name="generator" content="Notepad.exe">
 <title>%%TITLE%%</title>
 <link rel="icon" type="image/png" href="https://www.kompas.id/artikel/favicon.png">
+<link rel="alternate" type="application/rss+xml" title="KOMPAS Online - Latest News" href="/rss.xml">
+<link rel="alternate" type="application/rss+xml" title="KOMPAS Online - Most Popular" href="/rss.xml?feed=popular">
+<link rel="help" type="text/plain" title="llms.txt" href="/llms.txt">
+<link rel="stylesheet" href="/static/vendor/flatpickr/flatpickr.min.css">
 <link rel="stylesheet" href="/static/retro.css">
 </head>
 <body>
 %%BEFORE_PAGE%%
 <div class="page">
 
-  <div class="mast-top">
-    <span id="today">&nbsp;</span>
-    <span>EDISI INTERNET &middot; Jakarta</span>
-    <span class="mast-clock" id="clock">--:--:-- WIB</span>
+  <div class="utilbar">
+    <span class="util-hello">Welcome, <b>guest</b>! &#9825; <span id="today">&nbsp;</span> <span class="mast-clock" id="clock">--:--:--</span></span>
+    <span class="util-links">
+      <a href="/">Home</a> |
+      <a href="/?feed=latest" data-feed="latest">Latest</a> |
+      <a href="/rss.xml" class="rss-mini">RSS</a> |
+      <a href="/llms.txt">llms.txt</a> |
+      <a href="/docs">API</a> |
+      <a href="#sitemap">Sitemap</a> |
+      <a href="/random">Random</a>
+    </span>
   </div>
 
-  <div class="masthead">
-    <h1 class="logo"><a href="/" title="KOMPAS Online - Front Page"><span class="logo-k">KOMPAS</span> <span class="logo-online">Online</span></a></h1>
-    <div class="tagline">Amanat Hati Nurani Rakyat &mdash; <b>now on the Information Superhighway!</b></div>
-    <span class="edition">&#9733; UNOFFICIAL ALTERNATIVE FRONTEND &#9733;</span>
+  <div class="header">
+    <div class="hd-logo">
+      <h1 class="logo"><a href="/" title="KOMPAS Online - Front Page"><span class="logo-k">KOMPAS</span><span class="logo-online">Online</span></a></h1>
+      <div class="tagline">Amanat Hati Nurani Rakyat &mdash; <b>now on the Information Superhighway!</b></div>
+    </div>
+    <div class="hd-search">
+      <form action="/" method="get" id="search-form" role="search">
+        <input class="input95" id="q" name="q" type="text" placeholder="Search news, people, places..." value="%%QUERY%%" aria-label="Search">
+        <button class="btn95 btn-search" type="submit">&#128269; Search</button>
+      </form>
+      <div class="hd-trend"><b>Hot keywords:</b> <span id="trend-inline">loading&hellip;</span></div>
+    </div>
+    <div class="hd-promo">
+      <span class="pr">PR</span>
+      <a href="/rss.xml"><b class="rss-badge">RSS</b> Feeds are here!</a>
+      Put KOMPAS Online in your feed reader.<br>
+      <a href="/llms.txt">&#129302; <b>llms.txt</b></a> for AI agents &middot; <a href="/docs">JSON API</a>
+    </div>
   </div>
 
-  <div class="toolbar" role="toolbar">
+  <ul class="cat-tabs" id="cat-tabs">
+    <li class="c-top"><a href="/">Home</a></li>
+    <li class="c-new"><a href="/?feed=latest" data-feed="latest">Latest</a></li>
+    <li class="c-pop"><a href="/?feed=popular" data-feed="popular">Popular</a></li>
+    <li class="c-hot"><a href="/?feed=hot" data-feed="hot">Hot</a></li>
+    <li class="c-pol"><a href="/?q=politik" data-q="politik">Politics</a></li>
+    <li class="c-eko"><a href="/?q=ekonomi" data-q="ekonomi">Economy</a></li>
+    <li class="c-ola"><a href="/?q=olahraga" data-q="olahraga">Sports</a></li>
+    <li class="c-int"><a href="/?q=internasional" data-q="internasional">World</a></li>
+    <li class="c-tek"><a href="/?q=teknologi" data-q="teknologi">Tech</a></li>
+    <li class="c-bud"><a href="/?q=budaya" data-q="budaya">Culture</a></li>
+    <li class="c-dae"><a href="/#region-box" id="tab-region">My Area</a></li>
+    <li class="c-ark"><a href="#calendar-box">Archive</a></li>
+  </ul>
+
 %%TOOLBAR%%
-    <span class="sep" aria-hidden="true"></span>
-    <form action="/" method="get" id="search-form" role="search">
-      <label for="q">Search:</label>
-      <input class="input95" id="q" name="q" type="text" placeholder="Cari berita..." value="%%QUERY%%">
-      <button class="btn95" type="submit">Go!</button>
-    </form>
-  </div>
 
   <div class="ticker">
     <div class="ticker-label">BREAKING</div>
@@ -46,38 +78,60 @@
     </marquee>
   </div>
 
+  <div class="trendbar">
+    <span class="trend-label">&#128293; TRENDING</span>
+    <ol id="trend-bar"><li>Counting keywords&hellip;</li></ol>
+  </div>
+
   <table class="layout" role="presentation">
     <tr>
       <td class="col-left">
-        <div class="side-head">SECTIONS</div>
-        <ul class="nav-list">
-          <li><a href="/">Front Page</a></li>
-          <li><a href="/?feed=latest" data-feed="latest">Latest News</a></li>
-          <li><a href="/?feed=popular" data-feed="popular">Most Popular</a></li>
-          <li><a href="/?feed=hot" data-feed="hot">Hot Topics</a></li>
-        </ul>
+        <div class="bx">
+          <div class="bx-h c-pol">Categories</div>
+          <dl class="directory">
+            <dt><a href="/?q=politik">Politik &amp; Hukum</a></dt>
+            <dd><a href="/?q=pemilu">Pemilu</a>, <a href="/?q=DPR">DPR</a>, <a href="/?q=KPK">KPK</a>...</dd>
+            <dt><a href="/?q=ekonomi">Ekonomi</a></dt>
+            <dd><a href="/?q=saham">Saham</a>, <a href="/?q=UMKM">UMKM</a>, <a href="/?q=rupiah">Rupiah</a>...</dd>
+            <dt><a href="/?q=olahraga">Olahraga</a></dt>
+            <dd><a href="/?q=sepak+bola">Sepak bola</a>, <a href="/?q=bulu+tangkis">Bulu tangkis</a>, <a href="/?q=MotoGP">MotoGP</a>...</dd>
+            <dt><a href="/?q=internasional">Internasional</a></dt>
+            <dd><a href="/?q=ASEAN">ASEAN</a>, <a href="/?q=Timur+Tengah">Timur Tengah</a>, <a href="/?q=China">China</a>...</dd>
+            <dt><a href="/?q=teknologi">Iptek</a></dt>
+            <dd><a href="/?q=kecerdasan+artifisial">AI</a>, <a href="/?q=gawai">Gawai</a>, <a href="/?q=antariksa">Antariksa</a>...</dd>
+            <dt><a href="/?q=pendidikan">Humaniora</a></dt>
+            <dd><a href="/?q=pendidikan">Pendidikan</a>, <a href="/?q=kesehatan">Kesehatan</a>...</dd>
+            <dt><a href="/?q=lingkungan">Lingkungan</a></dt>
+            <dd><a href="/?q=iklim">Iklim</a>, <a href="/?q=karhutla">Karhutla</a>, <a href="/?q=banjir">Banjir</a>...</dd>
+            <dt><a href="/?q=budaya">Budaya</a></dt>
+            <dd><a href="/?q=film">Film</a>, <a href="/?q=musik">Musik</a>, <a href="/?q=sastra">Sastra</a>...</dd>
+          </dl>
+        </div>
 
-        <div class="side-head">TOPICS</div>
-        <ul class="nav-list">
-          <li><a href="/?q=politik">Politik</a></li>
-          <li><a href="/?q=ekonomi">Ekonomi</a></li>
-          <li><a href="/?q=olahraga">Olahraga</a></li>
-          <li><a href="/?q=internasional">Internasional</a></li>
-          <li><a href="/?q=teknologi">Teknologi</a></li>
-          <li><a href="/?q=budaya">Budaya</a></li>
-        </ul>
+        <div class="bx" id="calendar-box">
+          <div class="bx-h c-ark">News Calendar</div>
+          <div class="bx-b">
+            <input type="hidden" id="news-calendar" aria-label="Pick a day to read that day's news">
+            <div class="cal-legend"><span class="sun">&#9632;</span> Sun / holiday &nbsp;<span class="sat">&#9632;</span> Sat</div>
+            <ul class="holidays" id="holiday-list"></ul>
+          </div>
+        </div>
 
-        <div class="side-head">COOL LINKS</div>
-        <ul class="nav-list">
-          <li><a href="https://www.kompas.id" target="_blank" rel="noopener">kompas.id</a></li>
-          <li><a href="/api/article" target="_blank">Raw JSON feed</a></li>
-          <li><a href="/healthz" target="_blank">Server status</a></li>
-          <li><a href="https://github.com/niizam/kompas" target="_blank" rel="noopener">Source code</a></li>
-        </ul>
+        <div class="bx">
+          <div class="bx-h c-tek">Links</div>
+          <ul class="dots">
+            <li><a href="https://www.kompas.id" target="_blank" rel="noopener">kompas.id</a></li>
+            <li><a href="/rss.xml">RSS: Latest</a> / <a href="/rss.xml?feed=popular">Popular</a></li>
+            <li><a href="/llms.txt">llms.txt</a></li>
+            <li><a href="/docs">API docs</a></li>
+            <li><a href="/healthz">Server status</a></li>
+            <li><a href="https://github.com/niizam/kompas" target="_blank" rel="noopener">Source code</a></li>
+          </ul>
+        </div>
 
         <div class="side-note">
-          <p>&#127760; Best viewed with<br><b>Netscape Navigator 3.0</b><br>at 800&times;600</p>
-          <p>Set your monitor to<br>256 colors!</p>
+          &#127760; Best viewed with<br><b>Netscape Navigator 3.0</b><br>at 800&times;600
+          <p><button class="btn95" type="button" id="toggle-sparkles">Sparkles: ON</button></p>
         </div>
       </td>
 
@@ -86,51 +140,68 @@
       </td>
 
       <td class="col-right">
-        <div class="side-head">VISITOR COUNTER</div>
-        <div class="box" style="text-align:center">
-          You are visitor number<br>
-          <span class="counter" id="hit-counter" role="img" aria-label="Visit counter"><span>0</span><span>0</span><span>0</span><span>0</span><span>0</span><span>1</span></span><br>
-          <small>(to this page, from your computer)</small>
+        <div class="bx" id="weather-box">
+          <div class="bx-h c-int">Weather</div>
+          <div class="bx-b" id="weather" aria-live="polite">Checking the skies&hellip;</div>
         </div>
 
-        <div class="side-head">TOPIK HANGAT</div>
-        <div class="box">
-          <ol id="hot-box"><li>Loading&hellip;</li></ol>
+        <div class="bx">
+          <div class="bx-h c-pop">Access Ranking <a class="bx-more" href="/?feed=popular" data-feed="popular">more&raquo;</a></div>
+          <ol class="ranking" id="ranking"><li>Loading&hellip;</li></ol>
         </div>
 
-        <div class="side-head">READER POLL</div>
-        <div class="box poll" id="poll">
-          <b>Do you have an e-mail address yet?</b>
-          <form id="poll-form">
-            <label><input type="radio" name="vote" value="yes"> Yes, on CompuServe</label>
-            <label><input type="radio" name="vote" value="soon"> Getting one next year</label>
-            <label><input type="radio" name="vote" value="what"> What is e-mail?</label>
-            <button class="btn95" type="submit">Vote!</button>
-          </form>
+        <div class="bx">
+          <div class="bx-h c-hot">Topik Hangat <a class="bx-more" href="/?feed=hot" data-feed="hot">more&raquo;</a></div>
+          <ol class="ranking hot" id="hot-box"><li>Loading&hellip;</li></ol>
         </div>
 
-        <div class="side-head">JUKEBOX</div>
-        <div class="box midi" id="midi">
-          &#9835; Now playing:
-          <span class="now">kompas_theme.mid<span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span></span>
-          <button class="btn95" type="button" id="midi-play">&#9654; Play</button>
-          <button class="btn95" type="button" id="midi-stop">&#9632; Stop</button>
+        <div class="bx">
+          <div class="bx-h c-new">Visitor Counter</div>
+          <div class="bx-b center">
+            You are visitor number<br>
+            <span class="counter" id="hit-counter" role="img" aria-label="Visit counter"><span>0</span><span>0</span><span>0</span><span>0</span><span>0</span><span>1</span></span><br>
+            <small>(to this page, from your computer)</small>
+          </div>
+        </div>
+
+        <div class="bx">
+          <div class="bx-h c-eko">Reader Poll</div>
+          <div class="bx-b poll" id="poll">
+            <b>Do you have an e-mail address yet?</b>
+            <form id="poll-form">
+              <label><input type="radio" name="vote" value="yes"> Yes, on CompuServe</label>
+              <label><input type="radio" name="vote" value="soon"> Getting one next year</label>
+              <label><input type="radio" name="vote" value="what"> What is e-mail?</label>
+              <button class="btn95" type="submit">Vote!</button>
+            </form>
+          </div>
         </div>
 
         <div class="construction">
           <span class="digger" aria-hidden="true">&#128679;</span>
-          GUESTBOOK<br>UNDER CONSTRUCTION<br>
-          <small>Check back soon!</small>
+          GUESTBOOK<br>UNDER CONSTRUCTION
         </div>
 
-        <div class="box" style="text-align:center">
-          <button class="btn95" type="button" id="toggle-sparkles">Cursor sparkles: ON</button>
+        <div class="bx promo-468">
+          <span class="pr">PR</span>
+          <b>Your banner here!</b><br>
+          468&times;60 &amp; 88&times;31 slots available. Call 0-21-KOMPAS.
         </div>
       </td>
     </tr>
   </table>
 
-  <div class="footer">
+  <div class="footer" id="sitemap">
+    <table class="sitemap" role="presentation">
+      <tr>
+        <td><b>News</b><br><a href="/?feed=latest">Latest</a><br><a href="/?feed=popular">Popular</a><br><a href="/?feed=hot">Hot topics</a><br><a href="/random">Random story</a></td>
+        <td><b>Sections</b><br><a href="/?q=politik">Politik</a><br><a href="/?q=ekonomi">Ekonomi</a><br><a href="/?q=olahraga">Olahraga</a><br><a href="/?q=internasional">Internasional</a></td>
+        <td><b>More sections</b><br><a href="/?q=teknologi">Iptek</a><br><a href="/?q=budaya">Budaya</a><br><a href="/?q=lingkungan">Lingkungan</a><br><a href="/?q=pendidikan">Pendidikan</a></td>
+        <td><b>Feeds &amp; API</b><br><a href="/rss.xml">RSS (latest)</a><br><a href="/rss.xml?feed=popular">RSS (popular)</a><br><a href="/llms.txt">llms.txt</a><br><a href="/docs">API docs</a></td>
+        <td><b>About</b><br><a href="https://github.com/niizam/kompas">Source code</a><br><a href="https://www.kompas.id">kompas.id</a><br><a href="/healthz">Server status</a><br><a href="#">Back to top &uarr;</a></td>
+      </tr>
+    </table>
+
     <div class="webring">
       <span class="ring-title">&#128279; The Nusantara News Webring &#128279;</span>
       <a class="btn95" href="/?feed=latest">&laquo; Prev</a>
@@ -143,29 +214,25 @@
       <span class="badge88 notepad" title="Made with Notepad">Made with<big>Notepad</big></span>
       <span class="badge88 html" title="HTML 3.2">Valid<big>HTML 3.2</big></span>
       <span class="badge88 y2k" title="Y2K compliant">Y2K<big>READY</big></span>
-      <span class="badge88 res" title="800x600">Best at<big>800x600</big></span>
+      <a class="badge88 rss" href="/rss.xml" title="RSS feed">XML<big>RSS 2.0</big></a>
       <a class="badge88 fastapi" href="/docs" title="Powered by FastAPI">Powered by<big>FastAPI</big></a>
     </div>
 
     <div class="copyright">
       <font size="2">Copyright &copy; %%YEAR%% PT Kompas Media Nusantara</font><br>
-      <small>Unofficial alternative frontend &middot; Content belongs to Kompas &middot; This page is Y2K compliant</small>
+      <small>Unofficial alternative frontend &middot; Content belongs to Kompas &middot; Weather by Open-Meteo &middot; Location by ipwho.is &middot; Holidays by Nager.Date</small>
     </div>
   </div>
 </div>
 
-<div class="statusbar" aria-hidden="true">
-  <div class="status-msg" id="status-msg">Document: Done</div>
-  <div class="status-lock">&#128274;</div>
-  <div class="status-zone">Internet zone</div>
-</div>
-
 <noscript>
-  <div style="max-width:980px;margin:10px auto;border:3px solid #000;background:#fff;padding:8px;">
-    This site needs JavaScript to load articles. Try <a href="/api/article">/api/article</a>.
+  <div style="max-width:1000px;margin:10px auto;border:3px solid #000;background:#fff;padding:8px;">
+    This site needs JavaScript to load articles. Try <a href="/api/article">/api/article</a> or the <a href="/rss.xml">RSS feed</a>.
   </div>
 </noscript>
 
+<script src="/static/vendor/flatpickr/flatpickr.min.js"></script>
+<script src="/static/vendor/flatpickr/id.min.js"></script>
 <script src="/static/retro.js"></script>
 %%SCRIPTS%%
 </body>

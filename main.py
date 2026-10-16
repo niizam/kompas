@@ -1,16 +1,21 @@
 import json
 import random
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 from html import escape, unescape
 from pathlib import Path
+from threading import Lock
 from typing import Dict, Any, List, Union, Optional
-from urllib.parse import quote, quote_plus
+from urllib.parse import quote, quote_plus, urlencode
 import requests
-from fastapi import FastAPI, Query, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from cachetools import TTLCache
+from feedgen.feed import FeedGenerator
+from fastapi import FastAPI, Query, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+
+from regions import PROVINCES, DEFAULT_PROVINCE_CODE
 
 class Format(Enum):
     JSON = "json"
@@ -23,6 +28,7 @@ UTC = timezone.utc
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 LAYOUT_TEMPLATE = (BASE_DIR / "templates" / "layout.html").read_text(encoding="utf-8")
+LLMS_TEMPLATE = (BASE_DIR / "templates" / "llms.txt").read_text(encoding="utf-8")
 
 DAYS_ID = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
 MONTHS_ID = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli",
@@ -35,7 +41,7 @@ def render_page(title: str, toolbar: str, main: str, before_page: str = "",
     """Fill the shared retro layout. Single pass, so content can't inject placeholders."""
     values = {
         "TITLE": escape(title, quote=False),
-        "TOOLBAR": toolbar,
+        "TOOLBAR": f'  <div class="toolbar" role="toolbar">\n{toolbar}\n  </div>' if toolbar else "",
         "MAIN": main,
         "BEFORE_PAGE": before_page,
         "SCRIPTS": scripts,
@@ -71,35 +77,49 @@ def article_toolbar(url: str, title: str) -> str:
     return "\n".join("    " + b for b in buttons)
 
 
-FRONT_TOOLBAR = """\
-    <a class="btn95" href="/?feed=latest" data-feed="latest">&#128240; Latest</a>
-    <a class="btn95" href="/?feed=popular" data-feed="popular">&#11088; Popular</a>
-    <a class="btn95" href="/?feed=hot" data-feed="hot">&#128293; Hot Topics</a>"""
+FRONT_TOOLBAR = ""
 
 FRONT_MAIN = """\
+        <div id="front-modules">
+          <div class="topics bx">
+            <ul class="topic-tabs" role="tablist">
+              <li><button type="button" role="tab" data-topic="latest" aria-selected="true">Top Stories</button></li>
+              <li><button type="button" role="tab" data-topic="popular" aria-selected="false">Popular</button></li>
+              <li><button type="button" role="tab" data-topic="hot" aria-selected="false">Hot</button></li>
+              <li><button type="button" role="tab" data-topic="region" aria-selected="false" id="topic-tab-region">My Area</button></li>
+            </ul>
+            <div class="topics-body">
+              <ul class="topic-list" id="topic-list" role="tabpanel"><li>Loading&hellip;</li></ul>
+              <div class="topic-pic" id="topic-pic"></div>
+            </div>
+            <div class="topics-foot"><a href="/?feed=latest" id="topic-more">More news &raquo;</a> &middot; <a href="/rss.xml" id="topic-rss" class="rss-mini">RSS</a></div>
+          </div>
+
+          <div class="bx region-box" id="region-box">
+            <div class="bx-h c-dae">News from your area: <span id="region-name">&hellip;</span>
+              <label class="region-pick">Change: <select id="region-select" aria-label="Choose your province"><option>Loading&hellip;</option></select></label>
+            </div>
+            <div class="bx-b">
+              <div class="region-note" id="region-note">Finding where you are&hellip;</div>
+              <ul class="region-list" id="region-list"></ul>
+              <div class="region-more"><a href="/" id="region-more">More news from this area &raquo;</a> &middot; <a href="/rss.xml" id="region-rss" class="rss-mini">RSS</a></div>
+            </div>
+          </div>
+
+          <div class="section-grid" id="section-grid"></div>
+        </div>
+
         <div class="section-bar">
           <h2 id="section-title">Latest News</h2>
           <small id="section-meta">Contacting host...</small>
+          <a class="rss-mini" id="section-rss" href="/rss.xml">RSS</a>
         </div>
         <div id="results" aria-live="polite">
           <div class="loading-msg"><span class="hourglass" aria-hidden="true">&#8987;</span> Loading&hellip; <span class="blink">please wait</span></div>
-        </div>"""
+        </div>
+        <div class="pager" id="pager"></div>"""
 
 FRONT_OVERLAYS = """\
-<div id="dialup" hidden>
-  <div class="win95" role="dialog" aria-modal="true" aria-labelledby="dial-title">
-    <div class="titlebar"><span id="dial-title">Connect To: KOMPAS Online</span><button class="x" type="button" data-skip aria-label="Close">&times;</button></div>
-    <div class="win-body">
-      <div class="dial-row">
-        <div class="dial-icon" aria-hidden="true">&#9742;</div>
-        <div>Dial-Up Networking<br><span id="dial-status"><b>Initializing modem...</b></span></div>
-      </div>
-      <div class="dial-log bevel-in" id="dial-log"></div>
-      <div class="progress95 bevel-in" id="dial-progress"></div>
-      <div class="win-actions"><button class="btn95" type="button" data-skip>Skip &raquo;</button></div>
-    </div>
-  </div>
-</div>
 <div id="popup" class="win95" role="dialog" aria-labelledby="pop-title" hidden>
   <div class="titlebar"><span id="pop-title">&#128226; You've got news!</span><button class="x" type="button" data-close aria-label="Close">&times;</button></div>
   <div class="win-body">
@@ -119,26 +139,36 @@ class Kompas:
     POPULAR_URL = BASE + "article/popular-article"
     HOT_TOPIC_URL = BASE + "meta/hot_topic"
 
-    def __init__(self, timeout: float = 15.0):
+    def __init__(self, timeout: float = 15.0, cache_ttl: float = 120.0):
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": "okhttp/4.12.0",
             "Accept-Encoding": "gzip",
         })
         self.timeout = timeout
+        # The front page fans out into a dozen feeds; keep upstream traffic polite.
+        self._cache: TTLCache = TTLCache(maxsize=512, ttl=cache_ttl)
+        self._cache_lock = Lock()
 
     # -------------------------- HTTP -------------------------- #
 
     def _get(self, url: str, params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        key = (url, tuple(sorted((params or {}).items())))
+        with self._cache_lock:
+            if key in self._cache:
+                return self._cache[key]
         try:
             r = self.session.get(url, params=params, timeout=self.timeout)
             r.raise_for_status()
-            return r.json()
+            data = r.json()
         except requests.RequestException:
             return None
         except ValueError:
             # not JSON
             return None
+        with self._cache_lock:
+            self._cache[key] = data
+        return data
 
     # -------------------------- Utils -------------------------- #
 
@@ -338,6 +368,10 @@ class Kompas:
         parts.append(f'<div class="crumbs"><a href="/">KOMPAS Online</a> &raquo; {section}</div>')
         parts.append(f"<h1>{title}</h1>")
 
+        epoch = structured.get("published_date")
+        if epoch is not None:
+            day = datetime.fromtimestamp(epoch, tz=UTC).astimezone(JAKARTA_TZ).date().isoformat()
+            published = f'<a href="/?date={day}" title="More news from this day">{published}</a>'
         byline = [f"&#128197; {published}"]
         for a in authors:
             for role, name in a.items():
@@ -440,13 +474,18 @@ class Kompas:
             return [fallback_excerpt.strip()]
         return paras
 
-    def articles(self, type: Optional[str] = None, search: Optional[str] = None) -> List[Dict[str, Any]]:
+    def articles(self, type: Optional[str] = None, search: Optional[str] = None,
+                 date_from: Optional[date] = None, date_to: Optional[date] = None,
+                 page: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Retrieve articles feed.
 
         Args:
           type: None | "popular" | "hot"
           search: keyword to search; ignored if type is set
+          date_from, date_to: limit a search to this date range (Jakarta dates).
+            Either one on its own, without a keyword, gives a dated archive.
+          page: result page for searches (10 per page, starting at 1)
 
         Returns:
           List of normalized article dicts.
@@ -467,15 +506,17 @@ class Kompas:
                 return []
             return [self.process_article(a) for a in results]
 
-        if search and type is None:
-            today = datetime.now(JAKARTA_TZ).strftime("%Y-%m-%d")
+        if type is None and (search or date_from or date_to):
+            today = datetime.now(JAKARTA_TZ).date()
             search_url = f"{self.BASE}article/search"
             params = {
-                "from": "2017-01-01",
-                "to": today,
-                "keyword": quote_plus(search),
+                "from": (date_from or date(2017, 1, 1)).isoformat(),
+                "to": (date_to or today).isoformat(),
+                "keyword": search or "",
                 "priority": "score",
             }
+            if page and page > 1:
+                params["page"] = page
             payload = self._get(search_url, params=params) or {}
             results = payload.get("result") or []
             return [self.process_article(a) for a in results]
@@ -490,11 +531,25 @@ app = FastAPI(title="Kompas API")
 kompas_api = Kompas()
 
 @app.get("/api/article")
-def get_articles(type: Optional[str] = Query(default=None, pattern="^(popular|hot)$"), search: Optional[str] = None):
+def get_articles(
+    type: Optional[str] = Query(default=None, pattern="^(popular|hot)$"),
+    search: Optional[str] = None,
+    date_: Optional[date] = Query(default=None, alias="date", description="Archive for one day (YYYY-MM-DD)"),
+    date_from: Optional[date] = Query(default=None, alias="from", description="Search from this date (YYYY-MM-DD)"),
+    date_to: Optional[date] = Query(default=None, alias="to", description="Search up to this date (YYYY-MM-DD)"),
+    page: int = Query(default=1, ge=1, le=50),
+):
+    if date_:
+        date_from = date_to = date_
     try:
-        return kompas_api.articles(type=type, search=search)
+        return kompas_api.articles(type=type, search=search, date_from=date_from, date_to=date_to, page=page)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/regions")
+def get_regions():
+    """Indonesian provinces for the "news from your area" box and the weather widget."""
+    return {"default": DEFAULT_PROVINCE_CODE, "provinces": PROVINCES}
 
 @app.get("/read")
 def get_article_detail(permalink: str, format: Format = Format.JSON):
@@ -517,6 +572,78 @@ def random_story():
     if not items:
         return RedirectResponse("/")
     return RedirectResponse(read_link(random.choice(items)["url"]))
+
+FEED_LABELS = {"latest": "Latest News", "popular": "Most Popular", "hot": "Hot Topics"}
+
+def _image_type(url: str) -> str:
+    # Kompas' image CDN converts on the fly, e.g. ".../filters:format(webp)/.../photo.jpg"
+    if "format(webp)" in url:
+        return "image/webp"
+    ext = url.split("?", 1)[0].rsplit(".", 1)[-1].lower()
+    return {"png": "image/png", "gif": "image/gif", "webp": "image/webp"}.get(ext, "image/jpeg")
+
+@app.get("/rss.xml")
+@app.get("/rss", include_in_schema=False)
+def rss(
+    request: Request,
+    feed: str = Query(default="latest", pattern="^(latest|popular|hot)$"),
+    q: Optional[str] = None,
+    date_: Optional[date] = Query(default=None, alias="date"),
+):
+    """RSS 2.0 feed of any front page view: a feed, a search (?q=) or a day's archive (?date=)."""
+    if q or date_:
+        items = kompas_api.articles(search=q, date_from=date_, date_to=date_)
+        bits = ([f"Search: {q}"] if q else []) + ([f"Archive {date_.isoformat()}"] if date_ else [])
+        label = " / ".join(bits)
+        page_qs = urlencode({k: v for k, v in (("q", q), ("date", date_ and date_.isoformat())) if v})
+    else:
+        items = kompas_api.articles(type=None if feed == "latest" else feed)
+        label = FEED_LABELS[feed]
+        page_qs = "" if feed == "latest" else f"feed={feed}"
+
+    base = str(request.base_url).rstrip("/")
+    fg = FeedGenerator()
+    fg.title(f"KOMPAS Online -- {label}")
+    # feedgen uses the last link set as the RSS <link>, so "self" goes first
+    fg.link(href=str(request.url), rel="self")
+    fg.link(href=f"{base}/" + (f"?{page_qs}" if page_qs else ""), rel="alternate")
+    fg.description(f"{label} from kompas.id, via the KOMPAS Online alternative frontend.")
+    fg.language("id")
+    fg.ttl(10)
+    fg.generator("KOMPAS Online (feedgen)")
+
+    for item in items:
+        if not item.get("url"):
+            continue
+        fe = fg.add_entry(order="append")
+        fe.guid(item["url"], permalink=True)
+        fe.title(strip_tags(item.get("title", "")) or "Untitled")
+        fe.link(href=base + read_link(item["url"]))
+        desc: List[str] = []
+        if item.get("thumbnail"):
+            desc.append(f'<p><img src="{escape(item["thumbnail"])}" alt=""></p>')
+        for a in item.get("authors") or []:
+            for role, name in a.items():
+                names = ", ".join(name) if isinstance(name, list) else name
+                desc.append(f"<p><b>{escape(role.capitalize())}:</b> {escape(names)}</p>")
+        desc.extend(f"<p>{p}</p>" for p in (item.get("content") or [])[:3])
+        fe.description("\n".join(desc) or " ")
+        if item.get("published_date"):
+            fe.pubDate(datetime.fromtimestamp(item["published_date"], tz=UTC))
+        for kw in item.get("keywords") or []:
+            fe.category(term=kw)
+        if item.get("thumbnail"):
+            fe.enclosure(item["thumbnail"], "0", _image_type(item["thumbnail"]))
+
+    return Response(content=fg.rss_str(pretty=True), media_type="application/rss+xml; charset=utf-8")
+
+@app.get("/llms.txt", response_class=PlainTextResponse)
+def llms_txt(request: Request):
+    """How to navigate this site and use its API, for language models (https://llmstxt.org)."""
+    base = str(request.base_url).rstrip("/")
+    provinces = ", ".join(f"{p['code']} = {p['name']}" for p in PROVINCES)
+    body = LLMS_TEMPLATE.replace("{BASE}", base).replace("{PROVINCES}", provinces)
+    return PlainTextResponse(body, media_type="text/plain; charset=utf-8")
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
