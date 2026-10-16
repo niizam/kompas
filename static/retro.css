@@ -759,14 +759,17 @@ table.sitemap { width: 100%; border-collapse: collapse; text-align: left; margin
 table.sitemap td { vertical-align: top; padding: 4px 8px; border-right: 1px dotted var(--gray); line-height: 1.6; }
 table.sitemap td:last-child { border-right: 0; }
 
-.webring {
-  display: inline-block;
-  border: 3px ridge var(--silver);
-  background: var(--white);
-  padding: 4px 8px;
-  margin-bottom: 6px;
+/* Webring: a sidebar box, like every other module */
+.webring .bx-b { font-size: 11px; text-align: center; }
+.webring b { color: var(--c-bud); }
+.webring .ring-links {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dotted var(--line);
+  font-weight: bold;
 }
-.webring .ring-title { font: bold 12px var(--serif); display: block; margin-bottom: 3px; }
 
 .badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin: 6px 0; }
 /* 88x31 buttons, lovingly recreated in CSS */
@@ -963,7 +966,7 @@ table.sitemap td:last-child { border-right: 0; }
   html, body { background: #fff !important; padding: 0; }
   .page { border: 0; max-width: none; }
   .utilbar, .header .hd-search, .hd-promo, .cat-tabs, .toolbar, .ticker, .trendbar,
-  .col-left, .col-right, #popup, .footer .sitemap, .footer .webring, .footer .badges, .no-print { display: none !important; }
+  .col-left, .col-right, #popup, .footer .sitemap, .footer .badges, .no-print { display: none !important; }
   table.layout > tbody > tr > td.col-main { padding: 0; }
   .logo .logo-online { color: #000; background: none; }
 }
